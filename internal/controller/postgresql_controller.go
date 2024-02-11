@@ -73,7 +73,7 @@ func (r *PostgresqlReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			name := fmt.Sprintf("%s-%d", postgres.Name, i)
 			pod := createPostgresPod(name, postgres.Namespace)
 			if err := r.Create(ctx, pod); err != nil {
-				log.Error(err, "could not create postgres pod")
+				log.Error(err, "could not create postgres pod", "pod", pod)
 				return ctrl.Result{}, err
 			}
 		}
