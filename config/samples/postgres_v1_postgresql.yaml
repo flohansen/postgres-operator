@@ -10,4 +10,4 @@ metadata:
   name: postgresql-sample
   namespace: postgres
 spec:
-  replicas: 3
+  replicas: 5

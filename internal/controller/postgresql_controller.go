@@ -40,6 +40,7 @@ type PostgresqlReconciler struct {
 //+kubebuilder:rbac:groups=postgres.flohansen,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=postgres.flohansen,resources=postgresqls/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=postgres.flohansen,resources=postgresqls/finalizers,verbs=update
+//+kubebuilder:rbac:groups=*,resources=pods,verbs=get;list
 
 const (
 	podOwnerKey = ".metadata.controller"
@@ -49,10 +50,8 @@ func (r *PostgresqlReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	log := log.FromContext(ctx)
 
 	// Get the current state in the cluster
-	// TODO: Filter pods by postgres pods. Right now r.List returns every pod
-	// inside the given namespace.
 	var postgresPods core.PodList
-	if err := r.List(ctx, &postgresPods, client.InNamespace(req.Namespace)); err != nil {
+	if err := r.List(ctx, &postgresPods, client.InNamespace(req.Namespace), client.MatchingFields{podOwnerKey: req.Name}); err != nil {
 		log.Error(err, "could not list postgres pods")
 		return ctrl.Result{}, err
 	}
@@ -63,7 +62,7 @@ func (r *PostgresqlReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Get the custom resource object from the cluster
 	var postgres postgresv1.Postgresql
 	if err := r.Get(ctx, req.NamespacedName, &postgres); err != nil {
-		return r.cleanupPods(ctx, &postgresPods)
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// Update the state
@@ -72,6 +71,12 @@ func (r *PostgresqlReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		for i := len(postgresPods.Items); i < postgres.Spec.Replicas; i++ {
 			name := fmt.Sprintf("%s-%d", postgres.Name, i)
 			pod := createPostgresPod(name, postgres.Namespace)
+
+			if err := ctrl.SetControllerReference(&postgres, pod, r.Scheme); err != nil {
+				log.Error(err, "could not set controller reference")
+				return ctrl.Result{}, err
+			}
+
 			if err := r.Create(ctx, pod); err != nil {
 				log.Error(err, "could not create postgres pod", "pod", pod)
 				return ctrl.Result{}, err
@@ -81,7 +86,7 @@ func (r *PostgresqlReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		// Delete pods
 		for i := len(postgresPods.Items) - 1; i >= postgres.Spec.Replicas; i-- {
 			pod := postgresPods.Items[i]
-			if err := r.Delete(ctx, &pod); err != nil {
+			if err := r.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
 				log.Error(err, "could not delete postgres pod", "pod", pod)
 				return ctrl.Result{}, err
 			}
@@ -117,22 +122,23 @@ func createPostgresPod(name string, namespace string) *core.Pod {
 	}
 }
 
-func (r *PostgresqlReconciler) cleanupPods(ctx context.Context, pods *core.PodList) (ctrl.Result, error) {
-	if len(pods.Items) == 0 {
-		return ctrl.Result{}, nil
-	}
-
-	for _, item := range pods.Items {
-		if err := r.Delete(ctx, &item); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	return ctrl.Result{}, nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *PostgresqlReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &core.Pod{}, podOwnerKey, func(rawObj client.Object) []string {
+		job := rawObj.(*core.Pod)
+		owner := metav1.GetControllerOf(job)
+		if owner == nil {
+			return nil
+		}
+		if owner.Kind != "Postgresql" {
+			return nil
+		}
+
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&postgresv1.Postgresql{}).
 		Owns(&core.Pod{}).

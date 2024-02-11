@@ -5,6 +5,13 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - '*'
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
   - postgres.flohansen
   resources:
   - postgresqls
