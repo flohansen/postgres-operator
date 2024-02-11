@@ -39,10 +39,10 @@ spec:
           spec:
             description: PostgresqlSpec defines the desired state of Postgresql
             properties:
-              foo:
+              replicas:
                 description: Foo is an example field of Postgresql. Edit postgresql_types.go
                   to remove/update
-                type: string
+                type: integer
             type: object
           status:
             description: PostgresqlStatus defines the observed state of Postgresql

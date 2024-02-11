@@ -8,5 +8,6 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/created-by: postgres-operator
   name: postgresql-sample
+  namespace: postgres
 spec:
-  # TODO(user): Add fields here
+  replicas: 3
