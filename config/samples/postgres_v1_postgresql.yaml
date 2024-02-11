@@ -1,0 +1,12 @@
+apiVersion: postgres.flohansen/v1
+kind: Postgresql
+metadata:
+  labels:
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/instance: postgresql-sample
+    app.kubernetes.io/part-of: postgres-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: postgres-operator
+  name: postgresql-sample
+spec:
+  # TODO(user): Add fields here
